@@ -1,0 +1,29 @@
+﻿<Window x:Class="CANtoUSB_mainTester.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:chart="clr-namespace:CANtoUSB_UserControlLib.Utills.Chart;assembly=CANtoUSB_UserControlLib"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <!-- 게이지들을 가로로 나란히 배치 -->
+            <chart:mini_type1_bp x:Name="MyGauge_bp" Margin="10" Height="199" Width="181" />
+            <chart:mini_type1_gp x:Name="MyGauge_gp" Margin="10" Height="199" Width="181" />
+        </StackPanel>
+
+        <!-- 하단부 StackPanel로 Slider와 TextBlock을 함께 배치 -->
+        <StackPanel VerticalAlignment="Bottom" Margin="20">
+            <TextBlock x:Name="AngleValue" 
+                      Text="현재 각도: 45°" 
+                      HorizontalAlignment="Center" 
+                      Margin="0,0,0,5"
+                      FontSize="14"/>
+            <Slider x:Name="AngleSlider"
+                   Minimum="0"
+                   Maximum="270"
+                   ValueChanged="AngleSlider_ValueChanged" />
+        </StackPanel>
+    </Grid>
+</Window>

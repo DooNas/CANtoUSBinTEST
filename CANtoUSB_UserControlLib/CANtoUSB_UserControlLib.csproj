@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<Resource Include="Images\chart\mini_type1_bg.png" />
+		<Resource Include="Images\chart\mini_type1_bp.png" />
+		<Resource Include="Images\chart\mini_type_1_gp.png" />
+	</ItemGroup>
+
+</Project>
