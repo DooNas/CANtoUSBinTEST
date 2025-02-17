@@ -17,7 +17,7 @@ class Program
         int baudRate = 2000000;   // USB-CAN-A 기본 baud rate
 
         // DBC 파일 로드
-        string dbcFilePath = "E:\\Project\\.NET\\Connect\\vcan.dbc"; // DBC 파일 경로 수정
+        string dbcFilePath = "USB-CAN-A_TestToConsole\vcan.dbc"; // DBC 파일 경로 수정
         LoadDbcFile(dbcFilePath);
 
         // SerialPort 설정
