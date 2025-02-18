@@ -1,0 +1,41 @@
+VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: FCU ECU NAV FMS EMS
+
+BO_ 2364501234 FLIGHT_STATUS: 8 FCU
+ SG_ flight_mode : 0|3@1+ (1,0) [0|7] "" FMS
+ SG_ autopilot_engaged : 3|1@1+ (1,0) [0|1] "" FMS
+ SG_ landing_gear_status : 4|2@1+ (1,0) [0|3] "" FMS
+ SG_ flaps_position : 6|4@1+ (1,0) [0|15] "deg" FMS
+ SG_ aircraft_altitude : 16|16@1- (10,0) [-327680|327670] "ft" FMS
+ SG_ vertical_speed : 32|16@1- (1,0) [-32768|32767] "ft/min" FMS
+
+BO_ 2364501235 ENGINE_DATA: 8 ECU
+ SG_ engine1_thrust : 0|16@1- (0.1,0) [-3276.8|3276.7] "kN" FMS
+ SG_ engine2_thrust : 16|16@1- (0.1,0) [-3276.8|3276.7] "kN" FMS
+ SG_ engine1_temp : 32|12@1+ (1,0) [0|4095] "°C" FMS
+ SG_ engine2_temp : 44|12@1+ (1,0) [0|4095] "°C" FMS
+ SG_ engine1_status : 56|4@1+ (1,0) [0|15] "" FMS
+ SG_ engine2_status : 60|4@1+ (1,0) [0|15] "" FMS
+
+BO_ 2364501236 NAV_DATA: 8 NAV
+ SG_ latitude : 0|32@1- (0.0000001,0) [-214.7483648|214.7483647] "deg" FMS
+ SG_ longitude : 32|32@1- (0.0000001,0) [-214.7483648|214.7483647] "deg" FMS
+
+BO_ 2364501237 FUEL_SYSTEM: 8 EMS
+ SG_ fuel_qty_left : 0|16@1+ (0.1,0) [0|6553.5] "kg" FMS
+ SG_ fuel_qty_right : 16|16@1+ (0.1,0) [0|6553.5] "kg" FMS
+ SG_ fuel_flow_eng1 : 32|12@1+ (0.1,0) [0|409.5] "kg/min" FMS
+ SG_ fuel_flow_eng2 : 44|12@1+ (0.1,0) [0|409.5] "kg/min" FMS
+ SG_ fuel_temp : 56|8@1- (1,-50) [-50|205] "°C" FMS
+
+BO_ 2364501238 ENV_DATA: 8 FCU
+ SG_ outside_air_temp : 0|12@1- (0.1,-50) [-50|157.3] "°C" FMS
+ SG_ air_pressure : 12|12@1+ (0.1,0) [0|409.5] "kPa" FMS
+ SG_ wind_speed : 24|10@1+ (0.1,0) [0|102.3] "kt" FMS
+ SG_ wind_direction : 34|10@1+ (1,0) [0|1023] "deg" FMS
+ SG_ turbulence_level : 44|4@1+ (1,0) [0|15] "" FMS
