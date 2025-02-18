@@ -17,12 +17,11 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
         private double _minValue = 0;    // 최소값
         private double _maxValue = 100;  // 최대값
         private string _unit = "°C";  // 기본 단위 설정
-        private double _currentValue = 0; // 현재 값을 저장하기 위한 필드 추가
 
         public mini_type1_bp()
         {
             InitializeComponent();
-            UpdateGauge(0, 0);
+            UpdateGauge(0);
         }
 
         /// <summary>
@@ -32,12 +31,7 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
         public void SetUnit(string unit)
         {
             _unit = unit;
-
-            // 현재 저장된 값으로 업데이트
-            UpdateGauge(
-                (GlowRotation.Angle - HAND_START_ANGLE),
-                _currentValue
-            );
+            UpdateGauge(GlowRotation.Angle - HAND_START_ANGLE);
         }
 
         /// <summary>
@@ -61,20 +55,25 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
         public void SetValue(double value)
         {
             // 입력값을 최소값과 최대값 사이로 제한
-            double normalizedValue = Math.Min(Math.Max(value, _minValue), _maxValue);
-
+            double normalizedValue = Math.Clamp(value, _minValue, _maxValue);
             // 퍼센트로 변환 (0-100)
-            double percentage = ((normalizedValue - _minValue) / (_maxValue - _minValue)) * 100;
-
+            double percentage = (normalizedValue - _minValue) / (_maxValue - _minValue);
             // 각도로 변환 (0-270)
-            double angle = (percentage * MAX_ROTATION) / 100;
+            double angle = percentage * MAX_ROTATION;
 
             UpdateGauge(angle, normalizedValue);
         }
 
-        private void UpdateGauge(double angle, double value)
+        private void UpdateGauge(double angle, double value = 0)
         {
             // 게이지의 시작 및 끝 점 계산
+            UpdateGaugePath(angle);
+            UpdateGaugeNeedle(angle);
+            UpdateGaugeDisplay(value);
+        }
+
+        private void UpdateGaugePath(double angle)
+        {
             Point startPoint = GetPointOnCircle(GAUGE_START_ANGLE);
             Point endPoint = GetPointOnCircle(GAUGE_START_ANGLE + angle);
 
@@ -84,33 +83,36 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
             GaugeSegment.Size = new Size(_radius, _radius);
             GaugeSegment.IsLargeArc = angle > 180;
 
-            // 시침 회전 (225도에서 시작)
-            GlowRotation.Angle = HAND_START_ANGLE + angle;
-
-            // 외곽 게이지 색상 설정 (하늘색)
+            // 외곽 게이지 색상 결정(하늘색)
             GaugeArc.Stroke = new SolidColorBrush(Color.FromRgb(0, 255, 255));
-
-            // 값의 범위에 따른 색상 설정
-            double percentage = ((value - _minValue) / (_maxValue - _minValue)) * 100;
-            Color valueColor;
-
-            if (percentage <= 33.33)
-                valueColor = Colors.Yellow;     // 1단계: 노랑
-            else if (percentage <= 66.66)
-                valueColor = Colors.LimeGreen;  // 2단계: 초록
-            else
-                valueColor = Colors.Red;        // 3단계: 빨강
-
-            // 온도 값과 단위를 분리하여 다른 색상 적용
-            var valueText = new Run($"{(int)value}") { Foreground = new SolidColorBrush(valueColor) };
-            var unitText = new Run("°C") { Foreground = Brushes.White };
-
-            TemperatureDisplay.Inlines.Clear();
-            TemperatureDisplay.Inlines.Add(valueText);
-            TemperatureDisplay.Inlines.Add(unitText);
         }
 
-        // 주어진 각도(degree)를 기반으로 원 위의 점을 계산합니다.
+        private void UpdateGaugeNeedle(double angle)
+        {
+            GlowRotation.Angle = HAND_START_ANGLE + angle;
+        }
+
+        private void UpdateGaugeDisplay(double value)
+        {
+            double percentage = (value - _minValue) / (_maxValue - _minValue);
+            Color valueColor = GetValueColor(percentage);
+
+            TemperatureDisplay.Inlines.Clear();
+            TemperatureDisplay.Inlines.Add(new Run($"{(int)value}") { Foreground = new SolidColorBrush(valueColor) });
+            TemperatureDisplay.Inlines.Add(new Run(_unit) { Foreground = Brushes.White });
+        }
+
+        private Color GetValueColor(double percentage)
+        {
+            // 값의 범위에 따른 색상 변경
+            return percentage switch
+            {
+                <= 0.33 => Colors.Yellow,
+                <= 0.66 => Colors.LimeGreen,
+                _ => Colors.Red
+            };
+        }
+
         private Point GetPointOnCircle(double angleDegrees)
         {
             double angleRadians = angleDegrees * Math.PI / 180;
