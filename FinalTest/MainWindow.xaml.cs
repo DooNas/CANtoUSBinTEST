@@ -6,6 +6,9 @@ using DbcParserLib;
 using DbcParserLib.Model;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace FinalTest
 {
@@ -13,8 +16,9 @@ namespace FinalTest
     {
         private SerialPort serialPort;
         private Dbc dbc;
-        private byte[] buffer = new byte[1024];
-        private List<byte> receivedData = new List<byte>();
+        private ConcurrentQueue<(uint canId, byte[] payload)> receivedQueue = new ConcurrentQueue<(uint, byte[])>();
+        private Dictionary<uint, byte[]> lastProcessedData = new Dictionary<uint, byte[]>(); // 마지막 처리된 데이터 저장
+        private Stopwatch stopwatch = new Stopwatch();
 
         public MainWindow()
         {
@@ -22,8 +26,15 @@ namespace FinalTest
             LoadDbcFile();
             InitializeSerialPorts();
             InitializeGauges();
+            stopwatch.Start();
         }
-
+        private void ProcessUIUpdate()
+        {
+            while (receivedQueue.TryDequeue(out var data))
+            {
+                DecodeAndUpdateUI(data.canId, data.payload);
+            }
+        }
         private void InitializeGauges()
         {
             // 엔진 온도 게이지 초기화
@@ -45,7 +56,7 @@ namespace FinalTest
         {
             try
             {
-                dbc = Parser.ParseFromPath("E:\\GitHub\\Remote\\CANtoUSBinTEST\\FinalTest\\vcan.dbc");
+                dbc = Parser.ParseFromPath("E:/GitHub/Remote/CANtoUSBinTEST/FinalTest/vcan.dbc");
                 StatusText.Text = "DBC 파일 로드 완료";
             }
             catch (Exception ex)
@@ -93,12 +104,13 @@ namespace FinalTest
             byte[] tempBuffer = new byte[bytesToRead];
             serialPort.Read(tempBuffer, 0, bytesToRead);
 
-            receivedData.AddRange(tempBuffer);
-            ProcessReceivedData();
+            Task.Run(() => ProcessReceivedData(tempBuffer)); // 백그라운드 처리
         }
 
-        private void ProcessReceivedData()
+        private void ProcessReceivedData(byte[] tempBuffer)
         {
+            List<byte> receivedData = new List<byte>(tempBuffer);
+
             while (receivedData.Count >= 5)
             {
                 int i = 0;
@@ -125,25 +137,27 @@ namespace FinalTest
                         continue;
                     }
 
-                    uint canId = 0;
-                    if (isExtended)
-                    {
-                        canId = (uint)receivedData[i + 2]
-                               | ((uint)receivedData[i + 3] << 8)
-                               | ((uint)receivedData[i + 4] << 16)
-                               | ((uint)receivedData[i + 5] << 24);
-                    }
-                    else
-                    {
-                        canId = (uint)receivedData[i + 2] | ((uint)receivedData[i + 3] << 8);
-                    }
+                    uint canId = isExtended
+                        ? (uint)receivedData[i + 2] | ((uint)receivedData[i + 3] << 8) | ((uint)receivedData[i + 4] << 16) | ((uint)receivedData[i + 5] << 24)
+                        : (uint)receivedData[i + 2] | ((uint)receivedData[i + 3] << 8);
 
                     byte[] payload = new byte[dlc];
                     Array.Copy(receivedData.ToArray(), i + 1 + 1 + idLength, payload, 0, dlc);
 
-                    Dispatcher.BeginInvoke(new Action(() => DecodeAndUpdateUI(canId, payload)));
+                    // 같은 데이터는 무시하여 불필요한 UI 업데이트 방지
+                    if (lastProcessedData.TryGetValue(canId, out var lastPayload) && lastPayload.SequenceEqual(payload))
+                    {
+                        receivedData.RemoveRange(0, i + packetLength);
+                        continue;
+                    }
+
+                    lastProcessedData[canId] = payload;
+                    receivedQueue.Enqueue((canId, payload));
 
                     receivedData.RemoveRange(0, i + packetLength);
+
+                    // UI 업데이트 실행 (즉시 반영)
+                    Dispatcher.BeginInvoke(new Action(() => ProcessUIUpdate()));
                     break;
                 }
             }
