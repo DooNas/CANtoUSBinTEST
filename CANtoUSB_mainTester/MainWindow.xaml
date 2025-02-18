@@ -5,11 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:chart="clr-namespace:CANtoUSB_UserControlLib.Utills.Chart;assembly=CANtoUSB_UserControlLib"
         mc:Ignorable="d"
-        Title="MainWindow" Height="500" Width="800">
+        Title="MainWindow" Height="607" Width="800">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="0*"/>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -18,18 +19,16 @@
 
         <!-- 게이지 컨트롤들 -->
         <chart:mini_type1_gp x:Name="MyGauge_gp" 
-                            Grid.Column="0"
-                            Width="250" Height="250" 
-                            Margin="20"/>
+                            Grid.Column="1" 
+                            Margin="49,117,75,117"/>
 
         <chart:mini_type1_bp x:Name="MyGauge_bp" 
-                            Grid.Column="1"
-                            Width="250" Height="250" 
-                            Margin="20"/>
+                            Grid.Column="2" 
+                            Margin="75,117,75,117"/>
 
         <!-- 하단부 컨트롤 -->
         <StackPanel 
-                    Margin="20,422,213,20" Grid.RowSpan="2">
+                    Margin="7,10,223,432" Grid.Column="1">
             <TextBlock x:Name="AngleValue" 
                       Text="현재 각도: 0°" 
                       HorizontalAlignment="Center" 

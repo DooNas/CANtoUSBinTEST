@@ -56,18 +56,17 @@
 
             <!-- 온도 표시 -->
             <TextBlock x:Name="TemperatureDisplay"
-                      Text="25°C"
-                      FontSize="40"
-                      Foreground="White"
-                      VerticalAlignment="Top"
-                      HorizontalAlignment="Center"
-                      Margin="0,276,0,0" 
-                      Height="59" 
-                      Width="96" TextAlignment="Center">
+                       FontSize="40"
+                       VerticalAlignment="Top"
+                       HorizontalAlignment="Center"
+                       Margin="0,276,0,0" 
+                       Height="59" 
+                       Width="96" 
+                       TextAlignment="Center">      
                 <TextBlock.Effect>
                     <DropShadowEffect Color="Black"
-                                    BlurRadius="2"
-                                    ShadowDepth="1"/>
+                                      BlurRadius="2"
+                                      ShadowDepth="1"/>          
                 </TextBlock.Effect>
             </TextBlock>
         </Grid>

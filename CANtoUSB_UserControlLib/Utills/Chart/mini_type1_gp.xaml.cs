@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 
 namespace CANtoUSB_UserControlLib.Utills.Chart
@@ -15,11 +16,28 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
 
         private double _minValue = 0;    // 최소값
         private double _maxValue = 100;  // 최대값
+        private string _unit = "°C";  // 기본 단위 설정
+        private double _currentValue = 0; // 현재 값을 저장하기 위한 필드 추가
 
         public mini_type1_gp()
         {
             InitializeComponent();
             UpdateGauge(0, 0);
+        }
+
+        /// <summary>
+        /// 게이지의 단위를 설정합니다.
+        /// </summary>
+        /// <param name="unit">표시할 단위 (예: °C, °F, %, RPM 등)</param>
+        public void SetUnit(string unit)
+        {
+            _unit = unit;
+
+            // 현재 저장된 값으로 업데이트
+            UpdateGauge(
+                (GlowRotation.Angle - HAND_START_ANGLE),
+                _currentValue
+            );
         }
 
         /// <summary>
@@ -72,8 +90,24 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
             // 외곽 게이지 색상 설정 (초록색)
             GaugeArc.Stroke = new SolidColorBrush(Color.FromRgb(0, 255, 0));
 
-            // 온도 표시 업데이트 (실제 값을 정수로 표시)
-            TemperatureDisplay.Text = $"{(int)value}°C";
+            // 값의 범위에 따른 색상 설정
+            double percentage = ((value - _minValue) / (_maxValue - _minValue)) * 100;
+            Color valueColor;
+
+            if (percentage <= 33.33)
+                valueColor = Colors.Yellow;     // 1단계: 노랑
+            else if (percentage <= 66.66)
+                valueColor = Colors.LimeGreen;  // 2단계: 초록
+            else
+                valueColor = Colors.Red;        // 3단계: 빨강
+
+            // 온도 값과 단위를 분리하여 다른 색상 적용
+            var valueText = new Run($"{(int)value}") { Foreground = new SolidColorBrush(valueColor) };
+            var unitText = new Run("°C") { Foreground = Brushes.White };
+
+            TemperatureDisplay.Inlines.Clear();
+            TemperatureDisplay.Inlines.Add(valueText);
+            TemperatureDisplay.Inlines.Add(unitText);
         }
 
         // 주어진 각도(degree)를 기반으로 원 위의 점을 계산합니다.
