@@ -1,45 +1,45 @@
-﻿using System.Text;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
-namespace CANtoUSB_mainTester;
-
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
-public partial class MainWindow : Window
+namespace CANtoUSB_mainTester
 {
-    public MainWindow()
+    public partial class MainWindow : Window
     {
-        InitializeComponent(); 
-        AngleSlider.Value = 0;
-        // 게이지들도 0도로 초기화
-        MyGauge_bp.SetGaugeAngle(0);
-        MyGauge_gp.SetGaugeAngle(0);
-    }
+        private const double MIN_TEMP = -20;  // 최소 온도
+        private const double MAX_TEMP = 80;   // 최대 온도
 
-    // Slider의 값이 변경될 때마다 호출되는 이벤트 핸들러
-    private void AngleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (MyGauge_bp != null)
+        public MainWindow()
         {
-            MyGauge_bp.SetGaugeAngle(e.NewValue);
-            // TextBlock 업데이트
-            AngleValue.Text = $"현재 각도: {e.NewValue:F0}°";
+            InitializeComponent();
+
+            // 게이지의 값 범위 설정
+            MyGauge_bp.SetValueRange(MIN_TEMP, MAX_TEMP);
+            MyGauge_gp.SetValueRange(MIN_TEMP, MAX_TEMP);
+
+            // 슬라이더 범위 설정
+            AngleSlider.Minimum = MIN_TEMP;
+            AngleSlider.Maximum = MAX_TEMP;
+            AngleSlider.Value = 0;
+
+            // 게이지 초기값 설정
+            MyGauge_bp.SetValue(0);
+            MyGauge_gp.SetValue(0);
         }
 
-        if (MyGauge_gp != null)
+        // Slider의 값이 변경될 때마다 호출되는 이벤트 핸들러
+        private void AngleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            MyGauge_gp.SetGaugeAngle(e.NewValue);
-            // TextBlock 업데이트
-            AngleValue.Text = $"현재 각도: {e.NewValue:F0}°";
+            if (MyGauge_bp != null)
+            {
+                MyGauge_bp.SetValue(e.NewValue);
+                // TextBlock 업데이트
+                AngleValue.Text = $"현재 온도: {e.NewValue:F0}°C";
+            }
+            if (MyGauge_gp != null)
+            {
+                MyGauge_gp.SetValue(e.NewValue);
+            }
         }
     }
 }
