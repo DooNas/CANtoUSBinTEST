@@ -5,18 +5,33 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:chart="clr-namespace:CANtoUSB_UserControlLib.Utills.Chart;assembly=CANtoUSB_UserControlLib"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="500" Width="800">
     <Grid>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-            <!-- 게이지들을 가로로 나란히 배치 -->
-            <chart:mini_type1_bp x:Name="MyGauge_bp" Margin="10" Height="199" Width="181" />
-            <chart:mini_type1_gp x:Name="MyGauge_gp" Margin="10" Height="199" Width="181" />
-        </StackPanel>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-        <!-- 하단부 StackPanel로 Slider와 TextBlock을 함께 배치 -->
-        <StackPanel VerticalAlignment="Bottom" Margin="20">
+        <!-- 게이지 컨트롤들 -->
+        <chart:mini_type1_gp x:Name="MyGauge_gp" 
+                            Grid.Column="0"
+                            Width="250" Height="250" 
+                            Margin="20"/>
+
+        <chart:mini_type1_bp x:Name="MyGauge_bp" 
+                            Grid.Column="1"
+                            Width="250" Height="250" 
+                            Margin="20"/>
+
+        <!-- 하단부 컨트롤 -->
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" 
+                    Margin="20,0,20,20">
             <TextBlock x:Name="AngleValue" 
-                      Text="현재 각도: 45°" 
+                      Text="현재 각도: 0°" 
                       HorizontalAlignment="Center" 
                       Margin="0,0,0,5"
                       FontSize="14"/>
