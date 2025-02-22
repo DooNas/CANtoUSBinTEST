@@ -9,6 +9,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading;
 
 namespace FinalTest
 {
@@ -16,9 +17,14 @@ namespace FinalTest
     {
         private SerialPort serialPort;
         private Dbc dbc;
-        private ConcurrentQueue<(uint canId, byte[] payload)> receivedQueue = new ConcurrentQueue<(uint, byte[])>();
-        private Dictionary<uint, byte[]> lastProcessedData = new Dictionary<uint, byte[]>(); // 마지막 처리된 데이터 저장
+        // 원시 데이터와 처리된 데이터를 위한 큐
+        private ConcurrentQueue<byte[]> rawQueue = new ConcurrentQueue<byte[]>(); // 시리얼 포트에서 읽은 원시 데이터 저장
+        private ConcurrentQueue<(uint canId, byte[] payload)> processedQueue = new ConcurrentQueue<(uint, byte[])>(); // 파싱된 데이터 저장
+        private Dictionary<uint, byte[]> lastProcessedData = new Dictionary<uint, byte[]>(); // 중복 데이터 체크용 (마지막 처리된 데이터 저장)
         private Stopwatch stopwatch = new Stopwatch();
+
+        private CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        private DispatcherTimer uiUpdateTimer;
 
         public MainWindow()
         {
@@ -27,14 +33,17 @@ namespace FinalTest
             InitializeSerialPorts();
             InitializeGauges();
             stopwatch.Start();
+
+            // 백그라운드에서 원시 데이터 처리 Task 실행 (CancellationToken을 통해 안전하게 종료 가능)
+            Task.Run(() => ProcessRawDataQueueAsync(cancellationTokenSource.Token));
+
+            // UI 업데이트를 위한 DispatcherTimer 설정 (100ms 간격)
+            uiUpdateTimer = new DispatcherTimer();
+            uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(20);
+            uiUpdateTimer.Tick += UiUpdateTimer_Tick;
+            uiUpdateTimer.Start();
         }
-        private void ProcessUIUpdate()
-        {
-            while (receivedQueue.TryDequeue(out var data))
-            {
-                DecodeAndUpdateUI(data.canId, data.payload);
-            }
-        }
+
         private void InitializeGauges()
         {
             // 엔진 온도 게이지 초기화
@@ -98,68 +107,102 @@ namespace FinalTest
             }
         }
 
+        // 시리얼 포트에서 데이터가 수신되면 원시 데이터를 rawQueue에 저장합니다.
         private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
             int bytesToRead = serialPort.BytesToRead;
             byte[] tempBuffer = new byte[bytesToRead];
             serialPort.Read(tempBuffer, 0, bytesToRead);
 
-            Task.Run(() => ProcessReceivedData(tempBuffer)); // 백그라운드 처리
+            rawQueue.Enqueue(tempBuffer);
         }
 
-        private void ProcessReceivedData(byte[] tempBuffer)
+        // 백그라운드 Task: rawQueue에 저장된 원시 데이터를 누적하여 패킷 단위로 파싱한 후, processedQueue에 저장합니다.
+        private async Task ProcessRawDataQueueAsync(CancellationToken token)
         {
-            List<byte> receivedData = new List<byte>(tempBuffer);
-
-            while (receivedData.Count >= 5)
+            List<byte> accumulatedBuffer = new List<byte>();
+            while (!token.IsCancellationRequested)
             {
-                int i = 0;
-                while (i < receivedData.Count - 5)
+                // rawQueue에 쌓인 모든 원시 데이터를 누적 버퍼에 추가
+                while (rawQueue.TryDequeue(out var rawData))
                 {
-                    if (receivedData[i] != 0xAA)
-                    {
-                        i++;
-                        continue;
-                    }
-
-                    byte control = receivedData[i + 1];
-                    int dlc = control & 0x0F;
-                    bool isExtended = ((control >> 5) & 0x01) == 1;
-                    int idLength = isExtended ? 4 : 2;
-                    int packetLength = 1 + 1 + idLength + dlc + 1;
-
-                    if (i + packetLength > receivedData.Count)
-                        break;
-
-                    if (receivedData[i + packetLength - 1] != 0x55)
-                    {
-                        i++;
-                        continue;
-                    }
-
-                    uint canId = isExtended
-                        ? (uint)receivedData[i + 2] | ((uint)receivedData[i + 3] << 8) | ((uint)receivedData[i + 4] << 16) | ((uint)receivedData[i + 5] << 24)
-                        : (uint)receivedData[i + 2] | ((uint)receivedData[i + 3] << 8);
-
-                    byte[] payload = new byte[dlc];
-                    Array.Copy(receivedData.ToArray(), i + 1 + 1 + idLength, payload, 0, dlc);
-
-                    // 같은 데이터는 무시하여 불필요한 UI 업데이트 방지
-                    if (lastProcessedData.TryGetValue(canId, out var lastPayload) && lastPayload.SequenceEqual(payload))
-                    {
-                        receivedData.RemoveRange(0, i + packetLength);
-                        continue;
-                    }
-
-                    lastProcessedData[canId] = payload;
-                    receivedQueue.Enqueue((canId, payload));
-
-                    receivedData.RemoveRange(0, i + packetLength);
-
-                    // UI 업데이트 실행 (즉시 반영)
-                    Dispatcher.BeginInvoke(new Action(() => ProcessUIUpdate()));
-                    break;
+                    accumulatedBuffer.AddRange(rawData);
                 }
+
+                // 누적된 데이터가 충분하다면 패킷 단위로 처리
+                while (accumulatedBuffer.Count >= 5)
+                {
+                    int i = 0;
+                    bool processedPacket = false;
+                    // 시작 바이트 0xAA를 찾습니다.
+                    while (i < accumulatedBuffer.Count - 5)
+                    {
+                        if (accumulatedBuffer[i] != 0xAA)
+                        {
+                            i++;
+                            continue;
+                        }
+                        byte control = accumulatedBuffer[i + 1];
+                        int dlc = control & 0x0F;
+                        bool isExtended = ((control >> 5) & 0x01) == 1;
+                        int idLength = isExtended ? 4 : 2;
+                        int packetLength = 1 + 1 + idLength + dlc + 1; // 시작 바이트, 컨트롤, ID, 데이터, 종료 바이트
+
+                        if (i + packetLength > accumulatedBuffer.Count)
+                            break; // 아직 전체 패킷 수신 전
+
+                        if (accumulatedBuffer[i + packetLength - 1] != 0x55)
+                        {
+                            i++;
+                            continue;
+                        }
+
+                        uint canId = isExtended
+                            ? (uint)accumulatedBuffer[i + 2] | ((uint)accumulatedBuffer[i + 3] << 8) | ((uint)accumulatedBuffer[i + 4] << 16) | ((uint)accumulatedBuffer[i + 5] << 24)
+                            : (uint)accumulatedBuffer[i + 2] | ((uint)accumulatedBuffer[i + 3] << 8);
+
+                        byte[] payload = new byte[dlc];
+                        accumulatedBuffer.CopyTo(i + 1 + 1 + idLength, payload, 0, dlc);
+
+                        // 중복 데이터 검사 (같은 CAN ID와 페이로드라면 건너뜁니다)
+                        if (lastProcessedData.TryGetValue(canId, out var lastPayload) && lastPayload.SequenceEqual(payload))
+                        {
+                            accumulatedBuffer.RemoveRange(0, i + packetLength);
+                            processedPacket = true;
+                            continue;
+                        }
+                        lastProcessedData[canId] = payload;
+
+                        // 파싱된 데이터를 processedQueue에 저장합니다.
+                        processedQueue.Enqueue((canId, payload));
+
+                        // 처리한 패킷의 바이트를 누적 버퍼에서 제거합니다.
+                        accumulatedBuffer.RemoveRange(0, i + packetLength);
+                        processedPacket = true;
+                        break;
+                    }
+                    if (!processedPacket)
+                    {
+                        // 처리 가능한 패킷이 없으면 루프 종료
+                        break;
+                    }
+                }
+                await Task.Delay(10, token);
+            }
+        }
+
+        // UI 업데이트 타이머 이벤트: 주기적으로 processedQueue의 데이터를 UI에 반영합니다.
+        private void UiUpdateTimer_Tick(object sender, EventArgs e)
+        {
+            ProcessUIUpdate();
+        }
+
+        // processedQueue에 있는 데이터를 순차적으로 UI에 업데이트합니다.
+        private void ProcessUIUpdate()
+        {
+            while (processedQueue.TryDequeue(out var data))
+            {
+                DecodeAndUpdateUI(data.canId, data.payload);
             }
         }
 
@@ -396,6 +439,8 @@ namespace FinalTest
             {
                 serialPort.Close();
             }
+            cancellationTokenSource.Cancel();
+            uiUpdateTimer.Stop();
             base.OnClosing(e);
         }
     }
