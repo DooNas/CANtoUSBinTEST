@@ -1,22 +1,34 @@
 ﻿using DbcParserLib.Model;
+using DbcParserLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace FinalTest.Utils
+namespace FinalTest.Services
 {
-    public static class SignalDecoder
+    public class DbcService
     {
-        public static double DecodeSignal(Signal signal, byte[] data)
+        private readonly Dbc _dbc;
+
+        public DbcService(string dbcPath)
         {
-            bool isLittleEndian = signal.ByteOrder == 1;
-            int rawValue = ExtractBits(data, signal.StartBit, signal.Length, isLittleEndian);
+            _dbc = Parser.ParseFromPath(dbcPath);
+        }
+
+        public Message GetMessage(uint canId)
+        {
+            return _dbc.Messages.FirstOrDefault(m => m.ID == canId);
+        }
+
+        public double DecodeSignal(Signal signal, byte[] data)
+        {
+            int rawValue = ExtractBits(data, signal.StartBit, signal.Length, signal.ByteOrder == 1);
             return (rawValue * signal.Factor) + signal.Offset;
         }
 
-        private static int ExtractBits(byte[] data, int startBit, int length, bool isLittleEndian)
+        private int ExtractBits(byte[] data, int startBit, int length, bool isLittleEndian)
         {
             int value = 0;
             int byteIndex = startBit / 8;
