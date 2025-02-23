@@ -17,7 +17,7 @@
         <!-- Connection Controls -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
             <ComboBox x:Name="PortComboBox" Width="120" Margin="0,0,10,0"/>
-            <Button x:Name="ConnectButton" Content="Connect" Click="ConnectButton_Click" Width="100" Margin="0,0,10,0"/>
+            <Button x:Name="ConnectButton" Content="Connect" Click="ConnectButton_Click" IsEnabled="False" Width="100" Margin="0,0,10,0"/>
             <Button x:Name="LoadDbcButton" Content="Load DBC" Click="LoadDbcButton_Click" Width="100" Margin="0,0,10,0"/>
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" FontSize="14"/>
         </StackPanel>

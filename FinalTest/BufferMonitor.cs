@@ -3,30 +3,37 @@ using System.Windows.Threading;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace FinalTest
 {
-    /// <summary>
-    /// [CAN 데이터 버퍼 상태 모니터링 클래스]
-    /// 데이터 처리 성능과 오류 상태를 실시간으로 추적
-    /// </summary>
     public class BufferMonitor : INotifyPropertyChanged
     {
         private readonly DispatcherTimer monitorTimer;
         private readonly ConcurrentQueue<byte[]> rawQueue;
 
-        // 현재 버퍼에 저장된 패킷 수
         private int _bufferSize;
-        // 성공적으로 처리된 패킷 수
         private int _processedCount;
-        // 오류로 인해 드롭된 패킷 수
         private int _droppedCount;
 
+        private const int MinInterval = 10;  // 최소 인터벌 (10ms)
+        private const int MaxInterval = 100; // 최대 인터벌 (100ms)
+        private const int MaxBufferSizeThreshold = 1000; // 최대 버퍼 크기 기준
 
+        /// <summary>
+        /// [현재 버퍼 크기]
+        /// rawQueue에 저장된 패킷 개수를 나타냄
+        /// </summary>
         public int BufferSize
         {
             get => _bufferSize;
-            set => SetField(ref _bufferSize, value);
+            set
+            {
+                if (SetField(ref _bufferSize, value))
+                {
+                    AdjustMonitoringInterval(); // 버퍼 크기가 변경될 때 인터벌 자동 조정
+                }
+            }
         }
 
         public int ProcessedCount
@@ -44,9 +51,10 @@ namespace FinalTest
         public BufferMonitor(ConcurrentQueue<byte[]> queue)
         {
             rawQueue = queue;
+
             monitorTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(100)
+                Interval = TimeSpan.FromMilliseconds(MinInterval) // 초기값 10ms
             };
             monitorTimer.Tick += MonitorTimer_Tick;
         }
@@ -77,12 +85,24 @@ namespace FinalTest
         }
 
         /// <summary>
-        /// [버퍼 상태 업데이트 메서드]
-        /// [queue]ms 간격으로 호출되어 현재 버퍼 상태 갱신
+        /// [버퍼 상태 업데이트]
         /// </summary>
         private void UpdateBufferStatus()
         {
             BufferSize = rawQueue.Count;
+        }
+
+        /// <summary>
+        /// [인터벌 동적 조정]
+        /// 버퍼 크기에 따라 10~100ms 범위에서 자동 조정
+        /// </summary>
+        private void AdjustMonitoringInterval()
+        {
+            // 버퍼 크기를 최대 기준 (1000)으로 정규화하여 인터벌 계산
+            double ratio = Math.Min(1.0, (double)BufferSize / MaxBufferSizeThreshold);
+            int newInterval = (int)(MinInterval + (MaxInterval - MinInterval) * ratio);
+
+            monitorTimer.Interval = TimeSpan.FromMilliseconds(newInterval);
         }
 
         #region INotifyPropertyChanged

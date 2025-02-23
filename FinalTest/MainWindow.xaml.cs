@@ -118,6 +118,7 @@ namespace FinalTest
                 {
                     dbc = Parser.ParseFromPath(openFileDialog.FileName);
                     StatusText.Text = "DBC 파일 로드 성공";
+                    ConnectButton.IsEnabled = true;
                 }
                 catch (Exception ex)
                 {
