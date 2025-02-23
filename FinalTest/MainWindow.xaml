@@ -6,14 +6,19 @@
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
+            <!-- Connection Controls -->
             <RowDefinition Height="Auto"/>
+            <!-- Main Content -->
             <RowDefinition Height="*"/>
+            <!-- Buffer Monitoring -->
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Connection Controls -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
             <ComboBox x:Name="PortComboBox" Width="120" Margin="0,0,10,0"/>
-            <Button Content="Connect" Click="ConnectButton_Click" Width="100" Margin="0,0,10,0"/>
+            <Button x:Name="ConnectButton" Content="Connect" Click="ConnectButton_Click" Width="100" Margin="0,0,10,0"/>
+            <Button x:Name="LoadDbcButton" Content="Load DBC" Click="LoadDbcButton_Click" Width="100" Margin="0,0,10,0"/>
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" FontSize="14"/>
         </StackPanel>
 
@@ -59,12 +64,18 @@
                 <!-- Flight Status Info -->
                 <GroupBox Header="Flight Status" Grid.Row="2" Margin="5">
                     <StackPanel>
-                        <TextBlock x:Name="FlightModeText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="AutopilotText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="LandingGearText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="FlapsText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="AltitudeText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="VerticalSpeedText" Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="FlightModeText" Text="{Binding FlightStatus.Mode, StringFormat='Flight Mode: {0}'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="AutopilotText" Text="{Binding FlightStatus.AutopilotEngaged, StringFormat='Autopilot: {0}'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="LandingGearText" Text="{Binding FlightStatus.LandingGearStatus, StringFormat='Landing Gear: {0}'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="FlapsText" Text="{Binding FlightStatus.FlapsPosition, StringFormat='Flaps: {0:F1}°'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="AltitudeText" Text="{Binding FlightStatus.Altitude, StringFormat='Altitude: {0:F0} ft'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="VerticalSpeedText" Text="{Binding FlightStatus.VerticalSpeed, StringFormat='Vertical Speed: {0:F0} ft/min'}" 
+                                 Margin="5" FontSize="16"/>
                     </StackPanel>
                 </GroupBox>
             </Grid>
@@ -80,32 +91,65 @@
                 <!-- Engine Info -->
                 <GroupBox Header="Engine Data" Grid.Row="0" Margin="5">
                     <StackPanel>
-                        <TextBlock x:Name="Engine1ThrustText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="Engine2ThrustText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="Engine1StatusText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="Engine2StatusText" Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="Engine1ThrustText" Text="{Binding EngineData.Engine1Thrust, StringFormat='Engine 1 Thrust: {0:F1} kN'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="Engine2ThrustText" Text="{Binding EngineData.Engine2Thrust, StringFormat='Engine 2 Thrust: {0:F1} kN'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="Engine1StatusText" Text="{Binding EngineData.Engine1Status, StringFormat='Engine 1 Status: {0}'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="Engine2StatusText" Text="{Binding EngineData.Engine2Status, StringFormat='Engine 2 Status: {0}'}" 
+                                 Margin="5" FontSize="16"/>
                     </StackPanel>
                 </GroupBox>
 
                 <!-- Navigation Info -->
                 <GroupBox Header="Navigation" Grid.Row="1" Margin="5">
                     <StackPanel>
-                        <TextBlock x:Name="LatitudeText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="LongitudeText" Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="LatitudeText" Text="{Binding NavigationData.Latitude, StringFormat='Latitude: {0:F6}°'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="LongitudeText" Text="{Binding NavigationData.Longitude, StringFormat='Longitude: {0:F6}°'}" 
+                                 Margin="5" FontSize="16"/>
                     </StackPanel>
                 </GroupBox>
 
                 <!-- Environment Info -->
                 <GroupBox Header="Environment" Grid.Row="2" Margin="5">
                     <StackPanel>
-                        <TextBlock x:Name="OutsideAirTempText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="AirPressureText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="WindSpeedText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="WindDirectionText" Margin="5" FontSize="16"/>
-                        <TextBlock x:Name="TurbulenceLevelText" Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="OutsideAirTempText" Text="{Binding EnvironmentData.Temperature, StringFormat='Outside Air Temperature: {0:F1}°C'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="AirPressureText" Text="{Binding EnvironmentData.Pressure, StringFormat='Air Pressure: {0:F1} kPa'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="WindSpeedText" Text="{Binding EnvironmentData.WindSpeed, StringFormat='Wind Speed: {0:F1} kt'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="WindDirectionText" Text="{Binding EnvironmentData.WindDirection, StringFormat='Wind Direction: {0:F0}°'}" 
+                                 Margin="5" FontSize="16"/>
+                        <TextBlock x:Name="TurbulenceLevelText" Text="{Binding EnvironmentData.TurbulenceLevel, StringFormat='Turbulence Level: {0}'}" 
+                                 Margin="5" FontSize="16"/>
                     </StackPanel>
                 </GroupBox>
             </Grid>
         </Grid>
+        
+        <!-- Buffer Monitoring -->
+        <Border Grid.Row="2" BorderBrush="LightGray" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+            <StackPanel Orientation="Horizontal" Margin="5,10">
+                <TextBlock Text="Buffer Size: " Margin="0,0,5,0"/>
+                <TextBlock Margin="0,0,20,0">
+                    <Run Text="{Binding BufferMonitor.BufferSize}"/>
+                    <Run Text=" packets"/>
+                </TextBlock>
+                <TextBlock Text="Processed: " Margin="0,0,5,0"/>
+                <TextBlock Margin="0,0,20,0">
+                    <Run Text="{Binding BufferMonitor.ProcessedCount}"/>
+                    <Run Text=" packets"/>
+                </TextBlock>
+                <TextBlock Text="Dropped: " Margin="0,0,5,0"/>
+                <TextBlock>
+                    <Run Text="{Binding BufferMonitor.DroppedCount}"/>
+                    <Run Text=" packets"/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
     </Grid>
 </Window>

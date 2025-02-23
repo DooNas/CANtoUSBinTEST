@@ -9,7 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="DbcParserLib" Version="1.7.0" />
+    <PackageReference Include="Microsoft.VisualStudio.Utilities" Version="17.13.40008" />
     <PackageReference Include="System.IO.Ports" Version="9.0.2" />
   </ItemGroup>
 

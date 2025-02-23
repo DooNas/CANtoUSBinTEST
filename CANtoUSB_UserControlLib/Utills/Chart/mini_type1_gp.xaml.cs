@@ -24,6 +24,23 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
             UpdateGauge(0);
         }
 
+        public static readonly DependencyProperty ValueProperty = DependencyProperty.Register("Value", typeof(double), typeof(mini_type1_gp),
+        new PropertyMetadata(0.0, OnValueChanged));
+
+        private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is mini_type1_gp gauge)
+            {
+                gauge.SetValue((double)e.NewValue);
+            }
+        }
+
+        public double Value
+        {
+            get { return (double)GetValue(ValueProperty); }
+            set { SetValue(ValueProperty, value); }
+        }
+
         /// <summary>
         /// 게이지의 단위를 설정합니다.
         /// </summary>
@@ -121,5 +138,6 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
                 _center.Y + _radius * Math.Sin(angleRadians)
             );
         }
+
     }
 }

@@ -15,65 +15,51 @@ namespace FinalTest
 {
     public partial class MainWindow : Window
     {
+        // CAN 데이터 수신을 위한 시리얼 포트
         private SerialPort serialPort;
-        private Dbc dbc;
-        // 원시 데이터와 처리된 데이터를 위한 큐
-        private ConcurrentQueue<byte[]> rawQueue = new ConcurrentQueue<byte[]>(); // 시리얼 포트에서 읽은 원시 데이터 저장
-        private ConcurrentQueue<(uint canId, byte[] payload)> processedQueue = new ConcurrentQueue<(uint, byte[])>(); // 파싱된 데이터 저장
-        private Dictionary<uint, byte[]> lastProcessedData = new Dictionary<uint, byte[]>(); // 중복 데이터 체크용 (마지막 처리된 데이터 저장)
-        private Stopwatch stopwatch = new Stopwatch();
 
-        private CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-        private DispatcherTimer uiUpdateTimer;
+        // DBC 파일에서 로드된 CAN 메시지 정의
+        private Dbc dbc;
+
+        // 원시 데이터 버퍼 큐 - 스레드 안전한 ConcurrentQueue 사용
+        private ConcurrentQueue<byte[]> rawQueue = new ConcurrentQueue<byte[]>();
+
+        // 중복 데이터 필터링을 위한 마지막 처리된 데이터 저장
+        private Dictionary<uint, byte[]> lastProcessedData = new Dictionary<uint, byte[]>();
+
+        // 비동기 작업 취소를 위한 토큰
+        private CancellationTokenSource cancellationTokenSource;
+
+        // 애플리케이션 종료 상태 플래그
+        private bool isClosing = false;
+
+        // 버퍼 모니터링 컴포넌트
+        private BufferMonitor bufferMonitor;
+        public BufferMonitor BufferMonitor => bufferMonitor;
 
         public MainWindow()
         {
             InitializeComponent();
-            LoadDbcFile();
+            InitializeApplication();
+        }
+
+        /// <summary>
+        /// 시리얼 포트 초기화 메서드
+        /// 시스템에서 사용 가능한 모든 COM 포트를 검색하여 콤보박스에 추가
+        /// </summary>
+        private void InitializeApplication()
+        {
             InitializeSerialPorts();
             InitializeGauges();
-            stopwatch.Start();
 
-            // 백그라운드에서 원시 데이터 처리 Task 실행 (CancellationToken을 통해 안전하게 종료 가능)
-            Task.Run(() => ProcessRawDataQueueAsync(cancellationTokenSource.Token));
+            cancellationTokenSource = new CancellationTokenSource();
+            Task.Run(() => ProcessDataAsync(cancellationTokenSource.Token));
 
-            // UI 업데이트를 위한 DispatcherTimer 설정 (100ms 간격)
-            uiUpdateTimer = new DispatcherTimer();
-            uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(20);
-            uiUpdateTimer.Tick += UiUpdateTimer_Tick;
-            uiUpdateTimer.Start();
+            // 밀린 버퍼량 체크
+            bufferMonitor = new BufferMonitor(rawQueue);
+            DataContext = this;
+            bufferMonitor.Start();
         }
-
-        private void InitializeGauges()
-        {
-            // 엔진 온도 게이지 초기화
-            Engine1TempGauge.SetValueRange(0, 4095);
-            Engine1TempGauge.SetUnit("°C");
-
-            Engine2TempGauge.SetValueRange(0, 4095);
-            Engine2TempGauge.SetUnit("°C");
-
-            // 연료량 게이지 초기화
-            FuelLeftGauge.SetValueRange(0, 6553.5);
-            FuelLeftGauge.SetUnit("kg");
-
-            FuelRightGauge.SetValueRange(0, 6553.5);
-            FuelRightGauge.SetUnit("kg");
-        }
-
-        private void LoadDbcFile()
-        {
-            try
-            {
-                dbc = Parser.ParseFromPath("E:/GitHub/Remote/CANtoUSBinTEST/FinalTest/vcan.dbc");
-                StatusText.Text = "DBC 파일 로드 완료";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"DBC 파일 로드 실패: {ex.Message}");
-            }
-        }
-
         private void InitializeSerialPorts()
         {
             string[] ports = SerialPort.GetPortNames();
@@ -82,161 +68,269 @@ namespace FinalTest
                 PortComboBox.Items.Add(port);
             }
             if (ports.Length > 0)
+            {
                 PortComboBox.SelectedIndex = 0;
+            }
         }
 
-        private void ConnectButton_Click(object sender, RoutedEventArgs e)
+        private void InitializeGauges()
         {
-            if (serialPort != null && serialPort.IsOpen)
+            // Engine Temperature Gauges
+            Engine1TempGauge.SetValueRange(0, 4095);
+            Engine1TempGauge.SetUnit("°C");
+            Engine2TempGauge.SetValueRange(0, 4095);
+            Engine2TempGauge.SetUnit("°C");
+
+            // Fuel Quantity Gauges
+            FuelLeftGauge.SetValueRange(0, 6553.5);
+            FuelLeftGauge.SetUnit("kg");
+            FuelRightGauge.SetValueRange(0, 6553.5);
+            FuelRightGauge.SetUnit("kg");
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            isClosing = true;
+            bufferMonitor?.Stop();
+            cancellationTokenSource?.Cancel();
+
+            if (serialPort?.IsOpen == true)
             {
                 serialPort.Close();
-                StatusText.Text = "연결 해제됨";
-                return;
+                serialPort.Dispose();
             }
 
+            base.OnClosing(e);
+        }
+
+        private void LoadDbcButton_Click(object sender, RoutedEventArgs e)
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                DefaultExt = ".dbc",
+                Filter = "DBC Files (*.dbc)|*.dbc|All Files (*.*)|*.*",
+                Title = "DBC 파일 탐색기"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    dbc = Parser.ParseFromPath(openFileDialog.FileName);
+                    StatusText.Text = "DBC 파일 로드 성공";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to load DBC file: {ex.Message}");
+                    StatusText.Text = "DBC 파일 로드 실패";
+                }
+            }
+        }
+        private async void ConnectButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (serialPort?.IsOpen == true)
+            {
+                await DisconnectSerialPort();
+            }
+            else
+            {
+                await ConnectSerialPort();
+            }
+        }
+
+        private async Task ConnectSerialPort()
+        {
             try
             {
-                serialPort = new SerialPort(PortComboBox.SelectedItem.ToString(), 2000000, Parity.None, 8, StopBits.One);
+                string selectedPort = PortComboBox.SelectedItem?.ToString();
+                if (string.IsNullOrEmpty(selectedPort))
+                {
+                    MessageBox.Show("Please select a COM port");
+                    return;
+                }
+
+                serialPort = new SerialPort(selectedPort, 2000000, Parity.None, 8, StopBits.One);
                 serialPort.DataReceived += SerialPort_DataReceived;
                 serialPort.Open();
-                StatusText.Text = "연결됨";
+
+                StatusText.Text = "Connected";
+                ConnectButton.Content = "Disconnect";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"연결 실패: {ex.Message}");
+                MessageBox.Show($"Connection failed: {ex.Message}");
+                StatusText.Text = "Connection failed";
             }
         }
 
-        // 시리얼 포트에서 데이터가 수신되면 원시 데이터를 rawQueue에 저장합니다.
-        private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        private async Task DisconnectSerialPort()
         {
-            int bytesToRead = serialPort.BytesToRead;
-            byte[] tempBuffer = new byte[bytesToRead];
-            serialPort.Read(tempBuffer, 0, bytesToRead);
-
-            rawQueue.Enqueue(tempBuffer);
-        }
-
-        // 백그라운드 Task: rawQueue에 저장된 원시 데이터를 누적하여 패킷 단위로 파싱한 후, processedQueue에 저장합니다.
-        private async Task ProcessRawDataQueueAsync(CancellationToken token)
-        {
-            List<byte> accumulatedBuffer = new List<byte>();
-            while (!token.IsCancellationRequested)
+            try
             {
-                // rawQueue에 쌓인 모든 원시 데이터를 누적 버퍼에 추가
-                while (rawQueue.TryDequeue(out var rawData))
+                if (serialPort?.IsOpen == true)
                 {
-                    accumulatedBuffer.AddRange(rawData);
+                    serialPort.DataReceived -= SerialPort_DataReceived;
+                    serialPort.Close();
+                    serialPort.Dispose();
+                    serialPort = null;
                 }
 
-                // 누적된 데이터가 충분하다면 패킷 단위로 처리
-                while (accumulatedBuffer.Count >= 5)
+                StatusText.Text = "Disconnected";
+                ConnectButton.Content = "Connect";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Disconnection error: {ex.Message}");
+            }
+        }
+
+        private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        {
+            if (serialPort?.IsOpen != true || isClosing) return;
+
+            try
+            {
+                int bytesToRead = serialPort.BytesToRead;
+                byte[] buffer = new byte[bytesToRead];
+                serialPort.Read(buffer, 0, bytesToRead);
+                rawQueue.Enqueue(buffer);
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() =>
                 {
-                    int i = 0;
-                    bool processedPacket = false;
-                    // 시작 바이트 0xAA를 찾습니다.
-                    while (i < accumulatedBuffer.Count - 5)
+                    StatusText.Text = $"Read Error: {ex.Message}";
+                });
+            }
+        }
+
+        private async Task ProcessDataAsync(CancellationToken token)
+        {
+            List<byte> accumulatedBuffer = new List<byte>();
+
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    while (rawQueue.TryDequeue(out byte[] data))
                     {
-                        if (accumulatedBuffer[i] != 0xAA)
-                        {
-                            i++;
-                            continue;
-                        }
-                        byte control = accumulatedBuffer[i + 1];
-                        int dlc = control & 0x0F;
-                        bool isExtended = ((control >> 5) & 0x01) == 1;
-                        int idLength = isExtended ? 4 : 2;
-                        int packetLength = 1 + 1 + idLength + dlc + 1; // 시작 바이트, 컨트롤, ID, 데이터, 종료 바이트
+                        accumulatedBuffer.AddRange(data);
+                    }
 
-                        if (i + packetLength > accumulatedBuffer.Count)
-                            break; // 아직 전체 패킷 수신 전
+                    ProcessAccumulatedData(accumulatedBuffer);
+                    await Task.Delay(10, token);
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        StatusText.Text = $"Processing Error: {ex.Message}";
+                    });
+                    await Task.Delay(1000, token);
+                }
+            }
+        }
 
-                        if (accumulatedBuffer[i + packetLength - 1] != 0x55)
-                        {
-                            i++;
-                            continue;
-                        }
+        private void ProcessAccumulatedData(List<byte> buffer)
+        {
+            int initialSize = buffer.Count;
 
-                        uint canId = isExtended
-                            ? (uint)accumulatedBuffer[i + 2] | ((uint)accumulatedBuffer[i + 3] << 8) | ((uint)accumulatedBuffer[i + 4] << 16) | ((uint)accumulatedBuffer[i + 5] << 24)
-                            : (uint)accumulatedBuffer[i + 2] | ((uint)accumulatedBuffer[i + 3] << 8);
+            while (buffer.Count >= 5)
+            {
+                int i = 0;
+                bool processedPacket = false;
 
-                        byte[] payload = new byte[dlc];
-                        accumulatedBuffer.CopyTo(i + 1 + 1 + idLength, payload, 0, dlc);
+                while (i < buffer.Count - 5)
+                {
+                    if (buffer[i] != 0xAA)
+                    {
+                        bufferMonitor.IncrementDroppedCount();
+                        i++;
+                        continue;
+                    }
 
-                        // 중복 데이터 검사 (같은 CAN ID와 페이로드라면 건너뜁니다)
-                        if (lastProcessedData.TryGetValue(canId, out var lastPayload) && lastPayload.SequenceEqual(payload))
-                        {
-                            accumulatedBuffer.RemoveRange(0, i + packetLength);
-                            processedPacket = true;
-                            continue;
-                        }
-                        lastProcessedData[canId] = payload;
-
-                        // 파싱된 데이터를 processedQueue에 저장합니다.
-                        processedQueue.Enqueue((canId, payload));
-
-                        // 처리한 패킷의 바이트를 누적 버퍼에서 제거합니다.
-                        accumulatedBuffer.RemoveRange(0, i + packetLength);
+                    if (ProcessPacket(buffer, i, out int packetLength))
+                    {
+                        buffer.RemoveRange(0, i + packetLength);
+                        bufferMonitor.IncrementProcessedCount();
                         processedPacket = true;
                         break;
                     }
-                    if (!processedPacket)
-                    {
-                        // 처리 가능한 패킷이 없으면 루프 종료
-                        break;
-                    }
+                    bufferMonitor.IncrementDroppedCount();
+                    i++;
                 }
-                await Task.Delay(10, token);
+
+                if (!processedPacket) break;
             }
         }
-
-        // UI 업데이트 타이머 이벤트: 주기적으로 processedQueue의 데이터를 UI에 반영합니다.
-        private void UiUpdateTimer_Tick(object sender, EventArgs e)
+        /// <summary>
+        /// [CAN 데이터 패킷 처리 메서드]
+        /// </summary>
+        /// <param name="buffer">원시 데이터 버퍼</param>
+        /// <param name="startIndex">패킷 시작 인덱스</param>
+        /// <param name="packetLength">처리된 패킷의 길이</param>
+        /// <returns>패킷 처리 성공 여부</returns>
+        private bool ProcessPacket(List<byte> buffer, int startIndex, out int packetLength)
         {
-            ProcessUIUpdate();
-        }
+            packetLength = 0;
+            byte control = buffer[startIndex + 1];
+            int dlc = control & 0x0F;
+            bool isExtended = ((control >> 5) & 0x01) == 1;
+            int idLength = isExtended ? 4 : 2;
+            packetLength = 1 + 1 + idLength + dlc + 1;
 
-        // processedQueue에 있는 데이터를 순차적으로 UI에 업데이트합니다.
-        private void ProcessUIUpdate()
-        {
-            while (processedQueue.TryDequeue(out var data))
+            // 패킷 길이 확인
+            if (startIndex + packetLength > buffer.Count) return false;
+            // 종료 바이트 확인
+            if (buffer[startIndex + packetLength - 1] != 0x55) return false;
+
+            // CAN ID 추출 (Standard 또는 Extended)
+            uint canId = isExtended
+                ? (uint)buffer[startIndex + 2] | ((uint)buffer[startIndex + 3] << 8) |
+                  ((uint)buffer[startIndex + 4] << 16) | ((uint)buffer[startIndex + 5] << 24)
+                : (uint)buffer[startIndex + 2] | ((uint)buffer[startIndex + 3] << 8);
+
+            byte[] payload = new byte[dlc];
+            buffer.CopyTo(startIndex + 1 + 1 + idLength, payload, 0, dlc);
+
+            // 중복 데이터 필터링
+            if (!lastProcessedData.TryGetValue(canId, out byte[] lastPayload) ||
+                !payload.SequenceEqual(lastPayload))
             {
-                DecodeAndUpdateUI(data.canId, data.payload);
+                lastProcessedData[canId] = payload.ToArray();
+                ProcessDecodedData(canId, payload);
             }
+
+            return true;
         }
 
-        private void DecodeAndUpdateUI(uint canId, byte[] payload)
+        private void ProcessDecodedData(uint canId, byte[] payload)
         {
             var message = dbc.Messages.FirstOrDefault(m => m.ID == canId);
             if (message == null) return;
 
-            switch (message.Name)
+            Dispatcher.Invoke(() =>
             {
-                case "FLIGHT_STATUS":
-                    UpdateFlightStatus(message, payload);
-                    break;
-                case "ENGINE_DATA":
-                    UpdateEngineData(message, payload);
-                    break;
-                case "NAV_DATA":
-                    UpdateNavData(message, payload);
-                    break;
-                case "FUEL_SYSTEM":
-                    UpdateFuelSystem(message, payload);
-                    break;
-                case "ENV_DATA":
-                    UpdateEnvironmentData(message, payload);
-                    break;
-            }
+                foreach (var signal in message.Signals)
+                {
+                    double value = DecodeSignal(signal, payload);
+                    UpdateUIElement(message.Name, signal.Name, value);
+                }
+            });
         }
 
+        /// <summary>
+        /// [CAN 신호 디코딩 메서드]
+        /// DBC 파일의 정의에 따라 원시 바이트 데이터를 실제 값으로 변환
+        /// </summary>
+        /// <param name="signal">DBC에 정의된 신호 정보</param>
+        /// <param name="data">원시 바이트 데이터</param>
+        /// <returns>변환된 실제 값</returns>
         private double DecodeSignal(Signal signal, byte[] data)
         {
             bool isLittleEndian = signal.ByteOrder == 1;
             int rawValue = ExtractBits(data, signal.StartBit, signal.Length, isLittleEndian);
-            double physicalValue = (rawValue * signal.Factor) + signal.Offset;
-            return physicalValue;
+            return (rawValue * signal.Factor) + signal.Offset;
         }
 
         private int ExtractBits(byte[] data, int startBit, int length, bool isLittleEndian)
@@ -262,186 +356,172 @@ namespace FinalTest
             return value;
         }
 
-        private void UpdateFlightStatus(Message message, byte[] payload)
+        /// <summary>
+        /// [UI 업데이트 메서드]
+        /// 메시지 타입에 따라 적절한 UI 요소 업데이트
+        /// </summary>
+        /// <param name="messageName">CAN 메시지 이름</param>
+        /// <param name="signalName">신호 이름</param>
+        /// <param name="value">디코딩된 값</param>
+        private void UpdateUIElement(string messageName, string signalName, double value)
         {
-            foreach (var signal in message.Signals)
+            switch (messageName)
             {
-                double value = DecodeSignal(signal, payload);
-                switch (signal.Name)
-                {
-                    case "flight_mode":
-                        FlightModeText.Text = $"Flight Mode: {GetFlightModeName((int)value)}";
-                        break;
-                    case "autopilot_engaged":
-                        AutopilotText.Text = $"Autopilot: {(value == 1 ? "Engaged" : "Disengaged")}";
-                        break;
-                    case "landing_gear_status":
-                        LandingGearText.Text = $"Landing Gear: {GetLandingGearStatus((int)value)}";
-                        break;
-                    case "flaps_position":
-                        FlapsText.Text = $"Flaps: {value}°";
-                        break;
-                    case "aircraft_altitude":
-                        AltitudeText.Text = $"Altitude: {value:F0} ft";
-                        break;
-                    case "vertical_speed":
-                        VerticalSpeedText.Text = $"Vertical Speed: {value:F0} ft/min";
-                        break;
-                }
+                case "FLIGHT_STATUS":
+                    UpdateFlightStatusUI(signalName, value);
+                    break;
+                case "ENGINE_DATA":
+                    UpdateEngineDataUI(signalName, value);
+                    break;
+                case "FUEL_SYSTEM":
+                    UpdateFuelSystemUI(signalName, value);
+                    break;
+                case "NAV_DATA": 
+                    UpdateNavigationUI(signalName, value);
+                    break;
+                case "ENV_DATA":
+                    UpdateEnvironmentDataUI(signalName, value);
+                    break;
             }
         }
 
-        private void UpdateEngineData(Message message, byte[] payload)
+        private void UpdateFlightStatusUI(string signalName, double value)
         {
-            foreach (var signal in message.Signals)
+            switch (signalName)
             {
-                double value = DecodeSignal(signal, payload);
-                switch (signal.Name)
-                {
-                    case "engine1_thrust":
-                        Engine1ThrustText.Text = $"Engine 1 Thrust: {value:F1} kN";
-                        break;
-                    case "engine2_thrust":
-                        Engine2ThrustText.Text = $"Engine 2 Thrust: {value:F1} kN";
-                        break;
-                    case "engine1_temp":
-                        Engine1TempGauge.SetValue(value);
-                        break;
-                    case "engine2_temp":
-                        Engine2TempGauge.SetValue(value);
-                        break;
-                    case "engine1_status":
-                        Engine1StatusText.Text = $"Engine 1 Status: {GetEngineStatus((int)value)}";
-                        break;
-                    case "engine2_status":
-                        Engine2StatusText.Text = $"Engine 2 Status: {GetEngineStatus((int)value)}";
-                        break;
-                }
+                case "flight_mode":
+                    FlightModeText.Text = $"Flight Mode: {GetFlightModeName((int)value)}";
+                    break;
+                case "autopilot_engaged":
+                    AutopilotText.Text = $"Autopilot: {(value == 1 ? "Engaged" : "Disengaged")}";
+                    break;
+                case "landing_gear_status":
+                    LandingGearText.Text = $"Landing Gear: {GetLandingGearStatus((int)value)}";
+                    break;
+                case "flaps_position":
+                    FlapsText.Text = $"Flaps: {value:F1}°";
+                    break;
+                case "aircraft_altitude":
+                    AltitudeText.Text = $"Altitude: {value:F0} ft";
+                    break;
+                case "vertical_speed":
+                    VerticalSpeedText.Text = $"Vertical Speed: {value:F0} ft/min";
+                    break;
             }
         }
 
-        private void UpdateNavData(Message message, byte[] payload)
+        private void UpdateEngineDataUI(string signalName, double value)
         {
-            foreach (var signal in message.Signals)
+            switch (signalName)
             {
-                double value = DecodeSignal(signal, payload);
-                switch (signal.Name)
-                {
-                    case "latitude":
-                        LatitudeText.Text = $"Latitude: {value:F6}°";
-                        break;
-                    case "longitude":
-                        LongitudeText.Text = $"Longitude: {value:F6}°";
-                        break;
-                }
+                case "engine1_thrust":
+                    Engine1ThrustText.Text = $"Engine 1 Thrust: {value:F1} kN";
+                    break;
+                case "engine2_thrust":
+                    Engine2ThrustText.Text = $"Engine 2 Thrust: {value:F1} kN";
+                    break;
+                case "engine1_temp":
+                    Engine1TempGauge.SetValue(value);
+                    break;
+                case "engine2_temp":
+                    Engine2TempGauge.SetValue(value);
+                    break;
+                case "engine1_status":
+                    Engine1StatusText.Text = $"Engine 1 Status: {GetEngineStatus((int)value)}";
+                    break;
+                case "engine2_status":
+                    Engine2StatusText.Text = $"Engine 2 Status: {GetEngineStatus((int)value)}";
+                    break;
             }
         }
 
-        private void UpdateFuelSystem(Message message, byte[] payload)
+        private void UpdateFuelSystemUI(string signalName, double value)
         {
-            foreach (var signal in message.Signals)
+            switch (signalName)
             {
-                double value = DecodeSignal(signal, payload);
-                switch (signal.Name)
-                {
-                    case "fuel_qty_left":
-                        FuelLeftGauge.SetValue(value);
-                        break;
-                    case "fuel_qty_right":
-                        FuelRightGauge.SetValue(value);
-                        break;
-                }
+                case "fuel_qty_left":
+                    FuelLeftGauge.SetValue(value);
+                    break;
+                case "fuel_qty_right":
+                    FuelRightGauge.SetValue(value);
+                    break;
             }
         }
 
-        private void UpdateEnvironmentData(Message message, byte[] payload)
+        private void UpdateNavigationUI(string signalName, double value)
         {
-            foreach (var signal in message.Signals)
+            switch (signalName)
             {
-                double value = DecodeSignal(signal, payload);
-                switch (signal.Name)
-                {
-                    case "outside_air_temp":
-                        OutsideAirTempText.Text = $"Outside Air Temperature: {value:F1}°C";
-                        break;
-                    case "air_pressure":
-                        AirPressureText.Text = $"Air Pressure: {value:F1} kPa";
-                        break;
-                    case "wind_speed":
-                        WindSpeedText.Text = $"Wind Speed: {value:F1} kt";
-                        break;
-                    case "wind_direction":
-                        WindDirectionText.Text = $"Wind Direction: {value:F0}°";
-                        break;
-                    case "turbulence_level":
-                        TurbulenceLevelText.Text = $"Turbulence Level: {GetTurbulenceLevel((int)value)}";
-                        break;
-                }
+                case "latitude":
+                    LatitudeText.Text = $"Latitude: {value:F6}°";
+                    break;
+                case "longitude":
+                    LongitudeText.Text = $"Longitude: {value:F6}°";
+                    break;
             }
         }
 
-        private string GetFlightModeName(int mode)
+        private void UpdateEnvironmentDataUI(string signalName, double value)
         {
-            switch (mode)
+            switch (signalName)
             {
-                case 0: return "GROUND";
-                case 1: return "TAKEOFF";
-                case 2: return "CLIMB";
-                case 3: return "CRUISE";
-                case 4: return "DESCENT";
-                case 5: return "APPROACH";
-                case 6: return "LANDING";
-                default: return "UNKNOWN";
+                case "outside_air_temp":
+                    OutsideAirTempText.Text = $"Outside Air Temperature: {value:F1}°C";
+                    break;
+                case "air_pressure":
+                    AirPressureText.Text = $"Air Pressure: {value:F1} kPa";
+                    break;
+                case "wind_speed":
+                    WindSpeedText.Text = $"Wind Speed: {value:F1} kt";
+                    break;
+                case "wind_direction":
+                    WindDirectionText.Text = $"Wind Direction: {value:F0}°";
+                    break;
+                case "turbulence_level":
+                    TurbulenceLevelText.Text = $"Turbulence Level: {GetTurbulenceLevel((int)value)}";
+                    break;
             }
         }
 
-        private string GetLandingGearStatus(int status)
+        private string GetFlightModeName(int mode) => mode switch
         {
-            switch (status)
-            {
-                case 0: return "UP";
-                case 1: return "DOWN";
-                case 2: return "MOVING";
-                case 3: return "FAULT";
-                default: return "UNKNOWN";
-            }
-        }
+            0 => "GROUND",
+            1 => "TAKEOFF",
+            2 => "CLIMB",
+            3 => "CRUISE",
+            4 => "DESCENT",
+            5 => "APPROACH",
+            6 => "LANDING",
+            _ => "UNKNOWN"
+        };
 
-        private string GetEngineStatus(int status)
+        private string GetLandingGearStatus(int status) => status switch
         {
-            switch (status)
-            {
-                case 0: return "OFF";
-                case 1: return "STARTING";
-                case 2: return "RUNNING";
-                case 3: return "SHUTTING_DOWN";
-                case 4: return "FAULT";
-                default: return "UNKNOWN";
-            }
-        }
+            0 => "UP",
+            1 => "DOWN",
+            2 => "MOVING",
+            3 => "FAULT",
+            _ => "UNKNOWN"
+        };
 
-        private string GetTurbulenceLevel(int level)
+        private string GetEngineStatus(int status) => status switch
         {
-            switch (level)
-            {
-                case 0: return "NONE";
-                case 1: return "LIGHT";
-                case 2: return "MODERATE";
-                case 3: return "SEVERE";
-                case 4: return "EXTREME";
-                default: return "UNKNOWN";
-            }
-        }
+            0 => "OFF",
+            1 => "STARTING",
+            2 => "RUNNING",
+            3 => "SHUTTING_DOWN",
+            4 => "FAULT",
+            _ => "UNKNOWN"
+        };
 
-        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        private string GetTurbulenceLevel(int level) => level switch
         {
-            if (serialPort != null && serialPort.IsOpen)
-            {
-                serialPort.Close();
-            }
-            cancellationTokenSource.Cancel();
-            uiUpdateTimer.Stop();
-            base.OnClosing(e);
-        }
+            0 => "NONE",
+            1 => "LIGHT",
+            2 => "MODERATE",
+            3 => "SEVERE",
+            4 => "EXTREME",
+            _ => "UNKNOWN"
+        };
     }
 }

@@ -24,6 +24,23 @@ namespace CANtoUSB_UserControlLib.Utills.Chart
             UpdateGauge(0);
         }
 
+        public static readonly DependencyProperty ValueProperty = DependencyProperty.Register("Value", typeof(double), typeof(mini_type1_bp),
+        new PropertyMetadata(0.0, OnValueChanged));
+
+        public double Value
+        {
+            get { return (double)GetValue(ValueProperty); }
+            set { SetValue(ValueProperty, value); }
+        }
+
+        private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is mini_type1_bp gauge)
+            {
+                gauge.SetValue((double)e.NewValue);
+            }
+        }
+
         /// <summary>
         /// 게이지의 단위를 설정합니다.
         /// </summary>
