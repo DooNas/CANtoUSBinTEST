@@ -8,8 +8,18 @@ using System.Linq;
 
 namespace FinalTest.Services
 {
+    /// <summary>
+    /// [시리얼 통신 관리 서비스 클래스]
+    /// CAN 데이터의 수신과 기초적인 패킷 처리 담당
+    /// </summary>
     public class SerialService : IDisposable
     {
+        // 기본 통신 설정:
+        // - Baud Rate: 2000000
+        // - Data Bits: 8
+        // - Parity: None
+        // - Stop Bits: One
+
         private SerialPort _serialPort;
         private readonly ConcurrentQueue<byte[]> _rawQueue = new ConcurrentQueue<byte[]>();
         private CancellationTokenSource _cts = new CancellationTokenSource();
@@ -67,6 +77,12 @@ namespace FinalTest.Services
             ConnectionStatusChanged?.Invoke(this, "Disconnected");
         }
 
+        /// <summary>
+        /// [데이터 수신 이벤트 핸들러]
+        /// 수신된 데이터를 큐에 추가하고 비동기 처리 시작
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
             if (!_serialPort.IsOpen) return;
