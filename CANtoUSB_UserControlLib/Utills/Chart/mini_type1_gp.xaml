@@ -55,14 +55,15 @@
             </Grid>
 
             <!-- 온도 표시 -->
+            <!-- 온도 표시 -->
             <TextBlock x:Name="TemperatureDisplay"
                        FontSize="40"
                        VerticalAlignment="Top"
-                       HorizontalAlignment="Center"
+                       HorizontalAlignment="Stretch"
                        Margin="0,276,0,0" 
                        Height="59" 
-                       Width="96" 
-                       TextAlignment="Center">
+                       TextAlignment="Center"
+                       TextWrapping="NoWrap">
                 <TextBlock.Effect>
                     <DropShadowEffect Color="Black"
                                       BlurRadius="2"
